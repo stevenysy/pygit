@@ -1,7 +1,8 @@
 import argparse
 import sys
-import data
 import os
+import data
+import base
 
 parser = argparse.ArgumentParser()
 commands = parser.add_subparsers(dest="command", required=True)
@@ -16,6 +17,8 @@ def main(argv=sys.argv[1:]):
             cmd_hash_object(args)
         case "cat-file":
             cmd_cat_file(args)
+        case "write-tree":
+            cmd_write_tree(args)
         case _:
             parser.print_help()
             sys.exit(1)
@@ -78,3 +81,14 @@ cat_file_parser.add_argument("object", help="Object to display.")
 
 def cmd_cat_file(args: argparse.Namespace):
     data.cat_file(args.object, args.type)
+
+
+# ------------------------------- WRITE-TREE -----------------------------------
+
+write_tree_parser = commands.add_parser(
+    "write-tree", help="Store a directory in the object database."
+)
+
+
+def cmd_write_tree(_: argparse.Namespace):
+    print(data.write_tree())

@@ -172,7 +172,7 @@ class GitObject(ABC):
         self.type = None
 
     @abstractmethod
-    def serialize(self, repo: GitRepository) -> bytes:
+    def serialize(self) -> bytes:
         pass
 
     @abstractmethod
@@ -183,7 +183,7 @@ class GitObject(ABC):
 class GitBlob(GitObject):
     fmt = b"blob"
     
-    def serialize(self, _: GitRepository) -> bytes:
+    def serialize(self) -> bytes:
         return self.blob_data
     
     def deserialize(self, data: bytes):
@@ -217,8 +217,8 @@ def read_object(repo: GitRepository, hash: str) -> GitObject | None:
             # TODO: implement other object types
             # case b"commit":
             #     c = GitCommit
-            # case b"tree":
-            #     c = GitTree
+            case b"tree":
+                c = GitTree
             # case b"tag":
             #     c = GitTag
             case b"blob":
@@ -232,7 +232,7 @@ def read_object(repo: GitRepository, hash: str) -> GitObject | None:
 def write_object(obj: GitObject, repo: GitRepository = None) -> str:
     """Writes the data to the repository repo. Returns the hash of the object."""
 
-    data = obj.serialize(repo)
+    data = obj.serialize()
 
     # Add type header
     data_with_header = obj.fmt + b" " + str(len(data)).encode("ascii") + b"\x00" + data
@@ -267,8 +267,8 @@ def hash_object(data: bytes, fmt: bytes, write: bool) -> str:
     match fmt:
         # case b"commit":
         #     obj = GitCommit(data)
-        # case b"tree":
-        #     obj = GitTree(data)
+        case b"tree":
+            obj = GitTree(data)
         # case b"tag":
         #     obj = GitTag(data)
         case b"blob":
@@ -282,4 +282,145 @@ def hash_object(data: bytes, fmt: bytes, write: bool) -> str:
 def cat_file(obj: str, fmt: str) -> bytes:
     repo = repo_find()
     object = read_object(repo, find_object(repo, obj, fmt=fmt))
-    sys.stdout.buffer.write(object.serialize(repo))
+    sys.stdout.buffer.write(object.serialize())
+
+
+# ------------------------------- TREE -------------------------------
+
+class GitTreeRecord(object):
+    """Represents a single record in a GitTree.
+    Format of tree record: <filemode> space <path> space <sha-1>"""
+
+    def __init__(self, fmt: str, path: str, sha: str) -> None:
+        self.fmt = fmt
+        self.path = path
+        self.sha = sha
+
+
+class GitTree(GitObject):
+    """Represents a Git tree object."""
+
+    fmt = b"tree"
+
+    def init(self):
+        self.records = list()
+
+    def serialize(self) -> bytes:
+        return tree_serialize(self)
+
+    def deserialize(self, data: bytes):
+        self.records = parse_tree(data)
+
+
+def parse_record(raw: bytes, start: int = 0) -> tuple[int, GitTreeRecord]:
+    """Parses a single Git record."""
+
+    # Read format
+    x = raw.find(b" ", start)
+    fmt = str(raw[start:x])
+
+    # Read path
+    y = raw.find(b" ", x + 1)
+    path = str(raw[x + 1 : y])
+
+    # Read sha and convert to hex string
+    sha = format(int.from_bytes(raw[y + 1 : y + 21], "big"), "040x")
+
+    # Return end index of record + 1 (y+21) for next iteration when parsing a tree
+    return y + 21, GitTreeRecord(fmt, path, sha)
+
+
+def parse_tree(raw: bytes) -> list[GitTreeRecord]:
+    """Parses a Git tree."""
+
+    records = []
+    start = 0
+    while start < len(raw):
+        start, record = parse_record(raw, start)
+        records.append(record)
+
+    return records
+
+
+def tree_record_sort_key(record: GitTreeRecord) -> str:
+    """Returns path of record as key for sorting a Git tree."""
+
+    if record.fmt == "tree":
+        # Directory, need to append "/"
+        return record.path + "/"
+    else:
+        # Normal file
+        return record.path
+
+
+def tree_serialize(tree: GitTree) -> bytes:
+    """Serializes a Git tree."""
+
+    res = b""
+    tree.records.sort(key=tree_record_sort_key)
+    for record in tree.records:
+        res += (
+            record.fmt.encode("utf-8")
+            + b" "
+            + record.path.encode("utf-8")
+            + b" "
+            + bytes.fromhex(record.sha)
+        )
+
+    return res
+
+
+def write_tree(directory: str = ".") -> str:
+    """Writes a tree object from the given directory and returns the hash of the tree object."""
+
+    with os.scandir(directory) as it:
+        tree = GitTree()
+        for entry in it:
+            full = os.path.join(directory, entry.name)
+            if full == None or is_ignored(full):
+                continue
+
+            if entry.is_file(follow_symlinks=False):
+                with open(full, "rb") as f:
+                    raw = f.read()
+                    fmt = "blob"
+                    oid = hash_object(raw, b"blob", True)
+            elif entry.is_dir(follow_symlinks=False):
+                fmt = "tree"
+                oid = write_tree(full)
+            tree.records.append(GitTreeRecord(fmt, entry.name, oid))
+        
+    return hash_object(tree.serialize(), b"tree", True)
+
+
+def is_ignored(path: str) -> bool:
+    """Returns True if the path is ignored, False otherwise."""
+
+    dirs = path.split("/")
+    return ".pygit" in dirs or ".git" in dirs or "__pycache__" in dirs
+
+
+def read_tree(oid: str):
+    """Reads a tree object with the given oid."""
+
+    repo = repo_find()
+    for path, oid in get_tree_paths(repo, oid).items():
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(read_object(repo, oid).serialize())
+        
+        
+def get_tree_paths(repo: GitRepository, oid: str, base_path = "./") -> dict[str, str]:
+    res = {}
+    tree: GitTree = read_object(repo, find_object(repo, oid))
+    for record in tree.records:
+        assert '/' not in record.path
+        assert record.path not in ('..', '.')
+        path = base_path + record.path
+        if record.fmt == "blob":
+            res[path] = record.sha
+        elif record.fmt == "tree":
+            res.update(get_tree_paths(repo, record.sha, f"{path}/"))
+        else:
+            raise Exception(f"Unknown tree entry {record.fmt}")
+    return res
