@@ -19,6 +19,8 @@ def main(argv=sys.argv[1:]):
             cmd_cat_file(args)
         case "write-tree":
             cmd_write_tree(args)
+        case "read-tree":
+            cmd_read_tree(args)
         case _:
             parser.print_help()
             sys.exit(1)
@@ -34,7 +36,7 @@ init_parser.add_argument(
 
 def cmd_init(args: argparse.Namespace):
     data.init(args)
-    print(f"Initialized empty repository in {os.getcwd()}/{data.GITDIR}")
+    print(f"Initialized empty repository in {os.path.abspath(args.path)}/{data.GITDIR}")
 
 
 # ------------------------------- HASH-OBJECT -------------------------------
@@ -92,3 +94,15 @@ write_tree_parser = commands.add_parser(
 
 def cmd_write_tree(_: argparse.Namespace):
     print(data.write_tree())
+
+
+# ------------------------------- READ-TREE -------------------------------------
+
+read_tree_parser = commands.add_parser(
+    "read-tree", help="Read a tree into the current index."
+)
+read_tree_parser.add_argument("tree", help="OID of tree to read.")
+
+
+def cmd_read_tree(args: argparse.Namespace):
+    data.read_tree(args.tree)
