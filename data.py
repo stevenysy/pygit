@@ -317,11 +317,11 @@ def parse_record(raw: bytes, start: int = 0) -> tuple[int, GitTreeRecord]:
 
     # Read format
     x = raw.find(b" ", start)
-    fmt = str(raw[start:x])
+    fmt = raw[start:x].decode("utf-8")
 
     # Read path
     y = raw.find(b" ", x + 1)
-    path = str(raw[x + 1 : y])
+    path = raw[x + 1 : y].decode("utf-8")
 
     # Read sha and convert to hex string
     sha = format(int.from_bytes(raw[y + 1 : y + 21], "big"), "040x")
