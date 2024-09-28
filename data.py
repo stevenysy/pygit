@@ -403,6 +403,8 @@ def is_ignored(path: str) -> bool:
 def read_tree(oid: str):
     """Reads a tree object with the given oid."""
 
+    _empty_cur_dir()
+
     repo = repo_find()
     for path, oid in get_tree_paths(repo, oid).items():
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -414,8 +416,6 @@ def get_tree_paths(repo: GitRepository, oid: str, base_path = "./") -> dict[str,
     res = {}
     tree: GitTree = read_object(repo, find_object(repo, oid))
     for record in tree.records:
-        assert '/' not in record.path
-        assert record.path not in ('..', '.')
         path = base_path + record.path
         if record.fmt == "blob":
             res[path] = record.sha
@@ -424,3 +424,20 @@ def get_tree_paths(repo: GitRepository, oid: str, base_path = "./") -> dict[str,
         else:
             raise Exception(f"Unknown tree entry {record.fmt}")
     return res
+
+
+def _empty_cur_dir():
+    for root, dirs, files in os.walk(".", topdown=False):
+        for filename in files:
+            path = os.path.relpath(os.path.join(root, filename))
+            if is_ignored(path):
+                continue
+            os.remove(path)
+        for dirname in dirs:
+            path = os.path.relpath(os.path.join(root, dirname))
+            if is_ignored(path):
+                continue
+            try:
+                os.rmdir(path)
+            except (FileNotFoundError, OSError):
+                pass    # Directory might not be empty if it contains ignored files
