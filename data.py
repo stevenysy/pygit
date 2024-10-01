@@ -1,3 +1,4 @@
+import collections
 import hashlib
 import os
 import configparser
@@ -77,8 +78,8 @@ def repo_create(path: str):
         )
 
     # Create .git/HEAD
-    with open(repo_file(repo, "HEAD"), "w") as f:
-        f.write("ref: refs/heads/main\n")
+    with open(repo_file(repo, "HEAD"), "a") as f:
+        pass
 
     # Create .git/config
     with open(repo_file(repo, "config"), "w") as f:
@@ -215,8 +216,8 @@ def read_object(repo: GitRepository, hash: str) -> GitObject | None:
         # Choose constructor based on object type
         match fmt:
             # TODO: implement other object types
-            # case b"commit":
-            #     c = GitCommit
+            case b"commit":
+                c = GitCommit
             case b"tree":
                 c = GitTree
             # case b"tag":
@@ -265,8 +266,8 @@ def hash_object(data: bytes, fmt: bytes, write: bool) -> str:
         repo = None
     
     match fmt:
-        # case b"commit":
-        #     obj = GitCommit(data)
+        case b"commit":
+            obj = GitCommit(data)
         case b"tree":
             obj = GitTree(data)
         # case b"tag":
@@ -441,3 +442,118 @@ def _empty_cur_dir():
                 os.rmdir(path)
             except (FileNotFoundError, OSError):
                 pass    # Directory might not be empty if it contains ignored files
+
+
+# ---------------------------------- COMMITS -----------------------------------
+
+class GitCommit(GitObject):
+    fmt = b"commit"
+    
+    def serialize(self) -> bytes:
+        return kvlm_serialize(self.kvlm)
+    
+    def deserialize(self, data: bytes):
+        self.kvlm = kvlm_parse(data)
+    
+    def init(self):
+        self.kvlm = dict()
+        
+        
+def commit(message: str) -> str:
+    """Creates a new commit object with the given message and 
+    returns the hash of the commit object."""
+    
+    # TODO: add author, committer, etc.
+    commit_data = f"tree {write_tree()}\n"
+    
+    # Set parent to current HEAD if it exists
+    head = get_HEAD()
+    if head:
+        commit_data += f"parent {head}\n"
+        
+    commit_data += "\n"
+    commit_data += f"{message}\n"
+    
+    # Set HEAD to the new commit
+    oid = hash_object(commit_data.encode(), b"commit", True)
+    set_HEAD(oid)
+    
+    return oid
+        
+
+def kvlm_parse(raw: str, start: int=0, dct: dict=None) -> dict[str, str]:
+    """Parses a key-value list with message, which can be a commit or a tag."""
+    
+    if not dct:
+        dct = collections.OrderedDict()
+
+    space_index = raw.find(b" ", start)
+    newline_index = raw.find(b"\n", start)
+    
+    # If no space is found or newline is found before space, the remaining data is the message
+    if space_index < 0 or newline_index < space_index:
+        assert newline_index == start
+        dct[None] = raw[start+1:]
+        return dct
+    
+    key = raw[start:space_index]
+    
+    # Find the end of the value. Each continuation line starts with a space so we need to find
+    # the first newline that is not followed by a space
+    end = start
+    while True:
+        end = raw.find(b"\n", end + 1)
+        if raw[end + 1] != ord(" "):
+            break
+        
+    # Drop the leading spaces from the value
+    value = raw[space_index+1:end].replace(b"\n ", b"\n")
+    
+    # If the key already exists, append the value to form a list
+    if key in dct:
+        if type(dct[key]) == list:
+            dct[key].append(value)
+        else:
+            dct[key] = [dct[key], value]
+    else:
+        dct[key] = value
+    
+    return kvlm_parse(raw, start=end+1, dct=dct)
+
+
+def kvlm_serialize(kvlm: dict[str, str]) -> bytes:
+    """Serializes a key-value list with message."""
+    
+    res = b""
+    
+    # Append key-value pairs
+    for key in kvlm.keys():
+        if key == None:
+            continue
+        value = kvlm[key]
+        if type(value) != list:
+            value = [value]
+        
+        for v in value:
+            res += key + b" " + v.replace(b"\n", b"\n ") + b"\n"
+    
+    # Append message
+    res += b"\n" + kvlm[None]
+    
+    return res
+
+
+def set_HEAD(oid: str):
+    """Sets the HEAD to the given oid."""
+    
+    repo = repo_find()
+    with open(repo_file(repo, "HEAD"), "w") as f:
+        f.write(oid)
+        
+        
+def get_HEAD() -> str:
+    """Returns the oid of the HEAD."""
+    
+    repo = repo_find()
+    with open(repo_file(repo, "HEAD"), "r") as f:
+        return f.read().strip()

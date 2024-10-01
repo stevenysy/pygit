@@ -21,6 +21,8 @@ def main(argv=sys.argv[1:]):
             cmd_write_tree(args)
         case "read-tree":
             cmd_read_tree(args)
+        case "commit":
+            cmd_commit(args)
         case _:
             parser.print_help()
             sys.exit(1)
@@ -106,3 +108,15 @@ read_tree_parser.add_argument("tree", help="OID of tree to read.")
 
 def cmd_read_tree(args: argparse.Namespace):
     data.read_tree(args.tree)
+
+
+# ------------------------------- COMMIT ---------------------------------------
+
+commit_parser = commands.add_parser("commit", help="Record changes to the repository.")
+commit_parser.add_argument(
+    "-m", "--message", required=True, dest="message", help="Commit message."
+)
+
+
+def cmd_commit(args: argparse.Namespace):
+    print(data.commit(args.message))
