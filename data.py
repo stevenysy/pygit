@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 import zlib
 import sys
 import textwrap
+from colors import *
 
 
 GITDIR = ".pygit"
@@ -525,7 +526,7 @@ def kvlm_parse(raw: bytes, start: int=0, dct: dict=None) -> dict[str, str]:
 def kvlm_serialize(kvlm: dict[str, str]) -> bytes:
     """Serializes a key-value list with message."""
     
-    res = b""
+    res = ""
     
     # Append key-value pairs
     for key in kvlm.keys():
@@ -536,12 +537,12 @@ def kvlm_serialize(kvlm: dict[str, str]) -> bytes:
             value = [value]
         
         for v in value:
-            res += key + b" " + v.replace(b"\n", b"\n ") + b"\n"
+            res += key + " " + v.replace("\n", "\n ") + "\n"
     
     # Append message
-    res += b"\n" + kvlm[None]
+    res += "\n" + kvlm[None]
     
-    return res
+    return res.encode()
 
 
 def set_HEAD(oid: str):
@@ -566,14 +567,22 @@ def log(oid: str = None) -> None:
     """Prints the commit log starting from commit with given oid."""
     
     repo = repo_find()
+    head = get_HEAD()
     if not oid:
-        oid = get_HEAD()
+        oid = head
     
     while oid:
         commit: GitCommit = read_object(repo, oid)
-        print(f"commit {oid}\n")
-        print(textwrap.indent(commit.kvlm[None], "    "))
+        print(f"{YELLOW}commit {oid}{RESET}", end="")
+        
+        # Mark HEAD
+        if (oid == head):
+            print(f" {YELLOW}({RESET}{CYAN}HEAD{RESET}{YELLOW}){RESET}")
+        else:
+            print()
         print()
+        
+        print(textwrap.indent(commit.kvlm[None], "    "))
         
         if "parent" in commit.kvlm:
             oid = commit.kvlm["parent"]
