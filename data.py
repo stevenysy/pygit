@@ -6,6 +6,7 @@ import argparse
 from abc import ABC, abstractmethod
 import zlib
 import sys
+import textwrap
 
 
 GITDIR = ".pygit"
@@ -481,7 +482,7 @@ def commit(message: str) -> str:
     return oid
         
 
-def kvlm_parse(raw: str, start: int=0, dct: dict=None) -> dict[str, str]:
+def kvlm_parse(raw: bytes, start: int=0, dct: dict=None) -> dict[str, str]:
     """Parses a key-value list with message, which can be a commit or a tag."""
     
     if not dct:
@@ -493,10 +494,10 @@ def kvlm_parse(raw: str, start: int=0, dct: dict=None) -> dict[str, str]:
     # If no space is found or newline is found before space, the remaining data is the message
     if space_index < 0 or newline_index < space_index:
         assert newline_index == start
-        dct[None] = raw[start+1:]
+        dct[None] = raw[start+1:].decode()
         return dct
     
-    key = raw[start:space_index]
+    key = raw[start:space_index].decode()
     
     # Find the end of the value. Each continuation line starts with a space so we need to find
     # the first newline that is not followed by a space
@@ -507,7 +508,7 @@ def kvlm_parse(raw: str, start: int=0, dct: dict=None) -> dict[str, str]:
             break
         
     # Drop the leading spaces from the value
-    value = raw[space_index+1:end].replace(b"\n ", b"\n")
+    value = raw[space_index+1:end].replace(b"\n ", b"\n").decode()
     
     # If the key already exists, append the value to form a list
     if key in dct:
@@ -557,3 +558,24 @@ def get_HEAD() -> str:
     repo = repo_find()
     with open(repo_file(repo, "HEAD"), "r") as f:
         return f.read().strip()
+
+
+# ------------------------------- LOG -----------------------------------
+
+def log(oid: str = None) -> None:
+    """Prints the commit log starting from commit with given oid."""
+    
+    repo = repo_find()
+    if not oid:
+        oid = get_HEAD()
+    
+    while oid:
+        commit: GitCommit = read_object(repo, oid)
+        print(f"commit {oid}\n")
+        print(textwrap.indent(commit.kvlm[None], "    "))
+        print()
+        
+        if "parent" in commit.kvlm:
+            oid = commit.kvlm["parent"]
+        else:
+            oid = None

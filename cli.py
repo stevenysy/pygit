@@ -23,6 +23,8 @@ def main(argv=sys.argv[1:]):
             cmd_read_tree(args)
         case "commit":
             cmd_commit(args)
+        case "log":
+            cmd_log(args)
         case _:
             parser.print_help()
             sys.exit(1)
@@ -120,3 +122,13 @@ commit_parser.add_argument(
 
 def cmd_commit(args: argparse.Namespace):
     print(data.commit(args.message))
+
+
+# ------------------------------- LOG ---------------------------------------
+
+log_parser = commands.add_parser("log", help="Show commit logs.")
+log_parser.add_argument("oid", nargs="?", help="Commit to start at.")
+
+
+def cmd_log(args: argparse.Namespace):
+    data.log(args.oid)
