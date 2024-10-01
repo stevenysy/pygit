@@ -25,6 +25,8 @@ def main(argv=sys.argv[1:]):
             cmd_commit(args)
         case "log":
             cmd_log(args)
+        case "checkout":
+            cmd_checkout(args)
         case _:
             parser.print_help()
             sys.exit(1)
@@ -127,8 +129,18 @@ def cmd_commit(args: argparse.Namespace):
 # ------------------------------- LOG ---------------------------------------
 
 log_parser = commands.add_parser("log", help="Show commit logs.")
-log_parser.add_argument("oid", nargs="?", help="Commit to start at.")
+log_parser.add_argument("oid", nargs="?", help="ID of commit to start at.")
 
 
 def cmd_log(args: argparse.Namespace):
     data.log(args.oid)
+
+
+# ------------------------------- CHECKOUT ---------------------------------------
+
+checkout_parser = commands.add_parser("checkout", help="Checkout a commit.")
+checkout_parser.add_argument("oid", help="ID of commit to checkout.")
+
+
+def cmd_checkout(args: argparse.Namespace):
+    data.checkout(args.oid)

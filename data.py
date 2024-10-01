@@ -579,3 +579,13 @@ def log(oid: str = None) -> None:
             oid = commit.kvlm["parent"]
         else:
             oid = None
+
+
+# ------------------------------- CHECKOUT -----------------------------------
+
+def checkout(oid: str) -> None:
+    """Checks out the commit with the given oid."""
+    
+    commit: GitCommit = read_object(repo_find(), oid)
+    read_tree(commit.kvlm["tree"])
+    set_HEAD(oid)
