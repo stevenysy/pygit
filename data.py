@@ -8,6 +8,7 @@ import zlib
 import sys
 import textwrap
 from colors import *
+import string
 
 
 GITDIR = ".pygit"
@@ -469,7 +470,7 @@ def commit(message: str) -> str:
     commit_data = f"tree {write_tree()}\n"
     
     # Set parent to current HEAD if it exists
-    head = get_HEAD()
+    head = get_ref("HEAD")
     if head:
         commit_data += f"parent {head}\n"
         
@@ -478,7 +479,7 @@ def commit(message: str) -> str:
     
     # Set HEAD to the new commit
     oid = hash_object(commit_data.encode(), b"commit", True)
-    set_HEAD(oid)
+    update_ref("HEAD", oid)
     
     return oid
         
@@ -545,31 +546,56 @@ def kvlm_serialize(kvlm: dict[str, str]) -> bytes:
     return res.encode()
 
 
-def set_HEAD(oid: str):
-    """Sets the HEAD to the given oid."""
+# ------------------------------- REFS -----------------------------------
+
+def update_ref(ref: str, oid: str) -> None:
+    """Updates the ref to the given oid."""
     
-    repo = repo_find()
-    with open(repo_file(repo, "HEAD"), "w") as f:
+    ref_path = repo_file(repo_find(), ref)
+    os.makedirs(os.path.dirname(ref_path), exist_ok=True)
+    with open(ref_path, "w") as f:
         f.write(oid)
         
         
-def get_HEAD() -> str:
-    """Returns the oid of the HEAD."""
+def get_ref(ref: str) -> str:
+    """Returns the oid of the ref."""
     
-    repo = repo_find()
-    with open(repo_file(repo, "HEAD"), "r") as f:
-        return f.read().strip()
+    ref_path = repo_file(repo_find(), ref)
+    if os.path.isfile(ref_path):
+        with open(ref_path, "r") as f:
+            return f.read().strip()
+        
+        
+def get_oid(name: str) -> str:
+    """Returns the oid associated with the tag specified by name."""
+    
+    if name == "@":
+        name = "HEAD"
+    
+    paths_to_try = [
+        f"{name}",
+        f"refs/tags/{name}",
+        f"refs/heads/{name}",
+    ]
+    for path in paths_to_try:
+        oid = get_ref(path)
+        if oid:
+            return oid
+    
+    is_hex = all(c in string.hexdigits for c in name)
+    if len(name) != 40 or not is_hex:
+        raise Exception(f"Unknown name: {name}")
+    
+    return name  # If name is already an oid, return it
 
 
 # ------------------------------- LOG -----------------------------------
 
-def log(oid: str = None) -> None:
+def log(oid: str) -> None:
     """Prints the commit log starting from commit with given oid."""
     
     repo = repo_find()
-    head = get_HEAD()
-    if not oid:
-        oid = head
+    head = get_ref("HEAD")
     
     while oid:
         commit: GitCommit = read_object(repo, oid)
@@ -597,4 +623,11 @@ def checkout(oid: str) -> None:
     
     commit: GitCommit = read_object(repo_find(), oid)
     read_tree(commit.kvlm["tree"])
-    set_HEAD(oid)
+    update_ref("HEAD", oid)
+    
+
+# ------------------------------- TAG ---------------------------------------
+
+def create_tag(name: str, oid: str) -> None:
+    update_ref(f"refs/tags/{name}", oid)
+    print(f"Tagged {oid} with {name}")

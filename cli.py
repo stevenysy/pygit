@@ -27,6 +27,8 @@ def main(argv=sys.argv[1:]):
             cmd_log(args)
         case "checkout":
             cmd_checkout(args)
+        case "tag":
+            cmd_tag(args)
         case _:
             parser.print_help()
             sys.exit(1)
@@ -84,7 +86,7 @@ cat_file_parser.add_argument(
     choices=["blob", "commit", "tag", "tree"],
     help="Specify the type of the object",
 )
-cat_file_parser.add_argument("object", help="Object to display.")
+cat_file_parser.add_argument("object", type=data.get_oid, help="Object to display.")
 
 
 def cmd_cat_file(args: argparse.Namespace):
@@ -107,7 +109,7 @@ def cmd_write_tree(_: argparse.Namespace):
 read_tree_parser = commands.add_parser(
     "read-tree", help="Read a tree into the current index."
 )
-read_tree_parser.add_argument("tree", help="OID of tree to read.")
+read_tree_parser.add_argument("tree", type=data.get_oid, help="Tree to read.")
 
 
 def cmd_read_tree(args: argparse.Namespace):
@@ -129,7 +131,9 @@ def cmd_commit(args: argparse.Namespace):
 # ------------------------------- LOG ---------------------------------------
 
 log_parser = commands.add_parser("log", help="Show commit logs.")
-log_parser.add_argument("oid", nargs="?", help="ID of commit to start at.")
+log_parser.add_argument(
+    "oid", nargs="?", default="@", type=data.get_oid, help="Commit to start at."
+)
 
 
 def cmd_log(args: argparse.Namespace):
@@ -139,8 +143,21 @@ def cmd_log(args: argparse.Namespace):
 # ------------------------------- CHECKOUT ---------------------------------------
 
 checkout_parser = commands.add_parser("checkout", help="Checkout a commit.")
-checkout_parser.add_argument("oid", help="ID of commit to checkout.")
+checkout_parser.add_argument("oid", type=data.get_oid, help="Commit to checkout.")
 
 
 def cmd_checkout(args: argparse.Namespace):
     data.checkout(args.oid)
+
+
+# ------------------------------- TAG ---------------------------------------
+
+tag_parser = commands.add_parser("tag", help="Create a tag.")
+tag_parser.add_argument("name", help="Name of the tag.")
+tag_parser.add_argument(
+    "oid", nargs="?", default="@", type=data.get_oid, help="The commit to tag."
+)
+
+
+def cmd_tag(args: argparse.Namespace):
+    data.create_tag(args.name, args.oid)
