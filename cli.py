@@ -29,6 +29,8 @@ def main(argv=sys.argv[1:]):
             cmd_checkout(args)
         case "tag":
             cmd_tag(args)
+        case "k":
+            cmd_k(args)
         case _:
             parser.print_help()
             sys.exit(1)
@@ -161,3 +163,12 @@ tag_parser.add_argument(
 
 def cmd_tag(args: argparse.Namespace):
     data.create_tag(args.name, args.oid)
+
+
+# ------------------------------- K (VISUALIZE) ---------------------------------
+
+k_parser = commands.add_parser("k", help="Visualize all refs.")
+
+
+def cmd_k(_: argparse.Namespace):
+    data.show_refs_and_commits()

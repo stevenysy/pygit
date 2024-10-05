@@ -546,7 +546,48 @@ def kvlm_serialize(kvlm: dict[str, str]) -> bytes:
     return res.encode()
 
 
+def iter_commits(oids: set[str]):
+    visited = set()
+    
+    while oids:
+        oid = oids.pop()
+        if oid in visited:
+            continue
+        
+        visited.add(oid)
+        yield oid
+        
+        commit: GitCommit = read_object(repo_find(), oid)
+        if "parent" in commit.kvlm:
+            oids.add(commit.kvlm["parent"])
+
+
 # ------------------------------- REFS -----------------------------------
+
+def show_refs_and_commits():
+    """Visualizes all refs in the repo."""
+    
+    dot = "digraph commits {\n"
+    
+    oids = set()
+    for ref, oid in iter_refs():
+        # print(f"{ref} -> {YELLOW}{oid}{RESET}")
+        dot += f'"{ref}" [shape=note]\n'
+        dot += f'"{ref}" -> "{oid}"\n'
+        oids.add(oid)
+    
+    for oid in iter_commits(oids):
+        # print(f"{YELLOW}{oid}{RESET}")
+        commit: GitCommit = read_object(repo_find(), oid)
+        dot += f'"{oid}" [shape=box style=filled label="{commit.kvlm[None]}"]\n'
+        
+        if "parent" in commit.kvlm:
+            # print(f"Parent: {commit.kvlm['parent']}")
+            dot += f'"{oid}" -> "{commit.kvlm["parent"]}"\n'
+        
+    dot += "}"
+    print(dot)
+
 
 def update_ref(ref: str, oid: str) -> None:
     """Updates the ref to the given oid."""
@@ -587,6 +628,20 @@ def get_oid(name: str) -> str:
         raise Exception(f"Unknown name: {name}")
     
     return name  # If name is already an oid, return it
+
+
+def iter_refs():
+    """Iterator over all refs in the repo."""
+    
+    repo = repo_find()
+    
+    refs = ["HEAD"]
+    for root, _, files in os.walk(repo_dir(repo, "refs")):
+        root = os.path.relpath(root, repo.gitdir)
+        refs.extend(f"{root}/{name}" for name in files)
+        
+    for refname in refs:
+        yield refname, get_ref(refname)
 
 
 # ------------------------------- LOG -----------------------------------
